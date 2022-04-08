@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import axios from "axios"
 
 const history = ref([])
@@ -23,7 +23,7 @@ const fullNumber = computed(() => prefix.value.concat(simNumber.value))
 function playSound(type = '') {
   switch (type) {
     case 'gotNumber':
-      new Audio('https://assets.mixkit.co/sfx/download/mixkit-unlock-game-notification-253.wav').play()
+      new Audio('http://soundbible.com/mp3/Air Plane Ding-SoundBible.com-496729130.mp3').play()
       break
     case 'completeSearching':
       new Audio('https://assets.mixkit.co/sfx/download/mixkit-unlock-game-notification-253.wav').play()
@@ -37,31 +37,27 @@ function playSound(type = '') {
 }
 
 function addToHistory(obj) {
-  history.value.push(obj)
+  history.value.unshift(obj)
   if (obj.available) {
     playSound('gotNumber')
   }
 }
 
 function initAutoSearch() {
-  if (option.value.continueSearch && history.value.length < option.value.searchLimit) {
-    let searchNumber = () => {
-      simNumber.value = (parseInt(simNumber.value) + parseInt(option.value.incrementBy)).toString().padStart(simNumber.value.length, "0")
-      if (option.value.searchLimit) {
-        if (history.value.length < option.value.searchLimit) {
-          startSearch()
-        } else {
-          state.value.searching = false
-          playSound('completeSearching')
-        }
-      } else {
+  if (option.value.continueSearch) {
+    if (option.value.searchLimit > 0) {
+      if (history.value.length < option.value.searchLimit) {
+        simNumber.value = (parseInt(simNumber.value) + parseInt(option.value.incrementBy)).toString().padStart(simNumber.value.length, "0")
         startSearch()
+      } else {
+        state.value.searching = false
+        playSound('completeSearching')
       }
-    }
-    searchNumber()
 
-    // setTimeout(() => {
-    // }, 300)
+    } else {
+      simNumber.value = (parseInt(simNumber.value) + parseInt(option.value.incrementBy)).toString().padStart(simNumber.value.length, "0")
+      startSearch()
+    }
 
   }
 }
@@ -113,16 +109,19 @@ function getRandomAvailableNumber() {
   }
 
   option.value.searchingType = 'random'
+  state.value.searching = true
   axios.post(serverApiUrl, postData)
     .then(res => {
       option.value.searchingType = ''
-      // console.log(res.data)
+      state.value.searching = false
+
       res.data.freeMsisdnList.forEach(number => {
         history.value.push({
           simNumber: number,
           available: true
         })
       })
+
     })
     .catch(e => {
       alert('Something went wrong please the console')
@@ -146,9 +145,9 @@ function getRandomAvailableNumber() {
               <h3 class="card-title border-bottom pb-2 text-center">Find Available Numbers</h3>
               <form @submit.prevent="startSearch()">
                 <div class="row mb-2">
-                  <div class="col-5">
+                  <div class="col-5 pe-1">
                     <input
-                      class="mb-2 form-control"
+                      class="mb-2 form-control text-end"
                       v-model="prefix"
                       :disabled="state.searching"
                       type="text"
@@ -158,13 +157,13 @@ function getRandomAvailableNumber() {
                       v-if="!state.searching"
                       type="button"
                       @click="getRandomAvailableNumber"
-                      class="btn w-100 btn-primary"
+                      class="btn w-100 btn-secondary"
                     >
                       Random
                       Numbers
                     </button>
                   </div>
-                  <div class="col-7">
+                  <div class="col-7 ps-1">
                     <input
                       class="mb-2 form-control"
                       v-model="simNumber"
@@ -392,7 +391,7 @@ function getRandomAvailableNumber() {
                       />
                     </rect>
                   </svg>
-                  Searching Random Avaialble Numbers
+                  Searching Random Available Numbers
                 </p>
               </div>
 
@@ -411,7 +410,10 @@ function getRandomAvailableNumber() {
           <div class="card">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-center border-bottom mb-3">
-                <h3 class="card-title">History</h3>
+                <h3 class="card-title">
+                  History
+                  <span v-if="history.length">({{ history.length }})</span>
+                </h3>
                 <button
                   class="btn p-2 btn-close"
                   data-tooltip="Clear history"
@@ -425,7 +427,6 @@ function getRandomAvailableNumber() {
                   class="list-group-item d-flex justify-content-between align-items-center"
                   :class="[record.available ? 'list-group-item-info' : 'list-group-item-secondary']"
                 >
-                  [{{ ++index }}]
                   <span>{{ record.simNumber }}</span>
                   <span :class="[record.available ? 'text-primary' : 'text-danger']">
                     ({{
@@ -442,7 +443,7 @@ function getRandomAvailableNumber() {
                   >Buy Now</a>
                 </li>
               </ul>
-              <h5 v-else class="text-center">no number found</h5>
+              <h5 v-else class="text-center">no record found</h5>
             </div>
           </div>
         </div>
@@ -467,7 +468,7 @@ ul {
   overflow: scroll;
 }
 
-body{
+body {
   min-width: 400px;
 }
 </style>
