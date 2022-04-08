@@ -43,7 +43,7 @@ function addToHistory(obj) {
   }
 
   if (option.value.onlyAvailableNumber) {
-    if (res.data.data.available) {
+    if (obj.available) {
       history.value.unshift(obj)
     }
   } else {
