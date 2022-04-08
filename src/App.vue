@@ -1,22 +1,70 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from "axios"
+
 const history = ref([])
 const prefix = ref("8801886")
 const simNumber = ref("")
+
 const state = ref({
-  searchingType: ''
+  searching: false
 })
 
 const option = ref({
   continueSearch: false,
+  searchingType: '',
   incrementBy: 1,
-  searchLimited: false,
   searchLimit: 100,
+  onlyAvailableNumber: true,
 })
 
 const fullNumber = computed(() => prefix.value.concat(simNumber.value))
 
+function playSound(type = '') {
+  switch (type) {
+    case 'gotNumber':
+      new Audio('https://assets.mixkit.co/sfx/download/mixkit-unlock-game-notification-253.wav').play()
+      break
+    case 'completeSearching':
+      new Audio('https://assets.mixkit.co/sfx/download/mixkit-unlock-game-notification-253.wav').play()
+      break
+
+    default:
+      new Audio('http://soundbible.com/mp3/Air Plane Ding-SoundBible.com-496729130.mp3').play()
+      break
+  }
+
+}
+
+function addToHistory(obj) {
+  history.value.push(obj)
+  if (obj.available) {
+    playSound('gotNumber')
+  }
+}
+
+function initAutoSearch() {
+  if (option.value.continueSearch && history.value.length < option.value.searchLimit) {
+    let searchNumber = () => {
+      simNumber.value = (parseInt(simNumber.value) + parseInt(option.value.incrementBy)).toString().padStart(simNumber.value.length, "0")
+      if (option.value.searchLimit) {
+        if (history.value.length < option.value.searchLimit) {
+          startSearch()
+        } else {
+          state.value.searching = false
+          playSound('completeSearching')
+        }
+      } else {
+        startSearch()
+      }
+    }
+    searchNumber()
+
+    // setTimeout(() => {
+    // }, 300)
+
+  }
+}
 
 function startSearch() {
   if (fullNumber.value.length == 13) {
@@ -25,28 +73,22 @@ function startSearch() {
       "msisdn": fullNumber.value
     }
 
-    state.value.searchingType = "static"
+    option.value.searchingType = "static"
+    state.value.searching = true
     axios.post(serverApiUrl, postData)
       .then(res => {
-        state.value.searchingType = ''
-        // console.log(res.data)
+        option.value.searchingType = ''
         if (res.data.status == "SUCCESSFUL") {
-          history.value.push({
-            simNumber: fullNumber.value,
-            available: res.data.data.available
-          })
-          if (option.value.continueSearch && history.value.length < option.value.searchLimit) {
-            setTimeout(() => {
-              simNumber.value = parseInt(parseInt(simNumber.value) + parseInt(option.incrementBy ?? 1))
-              if (option.value.searchLimit) {
-                if (history.value.length < option.value.searchLimit) {
-                  startSearch()
-                }
-              } else {
-                startSearch()
-              }
-            }, 2000)
 
+          if (option.value.onlyAvailableNumber && res.data.data.available) {
+            addToHistory({
+              simNumber: fullNumber.value,
+              available: res.data.data.available
+            })
+          }
+
+          if (state.value.searching) {
+            initAutoSearch()
           }
         } else {
           console.log('server error')
@@ -70,10 +112,10 @@ function getRandomAvailableNumber() {
     "simCategory": "PREPAID"
   }
 
-  state.value.searchingType = 'random'
+  option.value.searchingType = 'random'
   axios.post(serverApiUrl, postData)
     .then(res => {
-      state.value.searchingType = ''
+      option.value.searchingType = ''
       // console.log(res.data)
       res.data.freeMsisdnList.forEach(number => {
         history.value.push({
@@ -101,17 +143,19 @@ function getRandomAvailableNumber() {
         <div class="col-md-6 mb-5">
           <div class="card">
             <div class="card-body">
-              <h3 class="card-title border-bottom mb-3 pb-2 text-center">Find Available Numbers</h3>
-              <form @submit.prevent="startSearch()" class="mb-5">
+              <h3 class="card-title border-bottom pb-2 text-center">Find Available Numbers</h3>
+              <form @submit.prevent="startSearch()">
                 <div class="row mb-2">
                   <div class="col-5">
                     <input
                       class="mb-2 form-control"
                       v-model="prefix"
+                      :disabled="state.searching"
                       type="text"
                       placeholder="01886"
                     />
                     <button
+                      v-if="!state.searching"
                       type="button"
                       @click="getRandomAvailableNumber"
                       class="btn w-100 btn-primary"
@@ -126,209 +170,240 @@ function getRandomAvailableNumber() {
                       v-model="simNumber"
                       type="text"
                       placeholder="Enter last 6 digit of your choice"
+                      :disabled="state.searching"
                     />
                     <button
+                      v-if="!state.searching"
                       type="submit"
                       class="btn w-100 btn-primary"
-                      :class="[simNumber.length == 6 ? 'btn-success' : 'disabled']"
-                    >Search Number</button>
+                      :disabled="simNumber.length != 6"
+                    >Search</button>
                   </div>
                 </div>
               </form>
 
-              <p>Options</p>
-              <div class="form-check form-switch d-flex justify-content-between align-items-center">
-                <div>
-                  <input
-                    class="form-check-input"
-                    v-model="option.continueSearch"
-                    type="checkbox"
-                    id="continueSearch"
-                  />
-                  <label class="form-check-label" for="continueSearch">Continue search by :</label>
+              <div v-if="!state.searching">
+                <p>Options</p>
+                <div
+                  class="form-check form-switch d-flex justify-content-between align-items-center"
+                >
+                  <div>
+                    <input
+                      class="form-check-input"
+                      v-model="option.onlyAvailableNumber"
+                      type="checkbox"
+                      id="onlyAvailableNumber"
+                    />
+                    <label class="form-check-label" for="onlyAvailableNumber">Only Available Number</label>
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  v-model="option.incrementBy"
-                  class="form-control w-50"
-                  :disabled="!option.continueSearch"
-                />
-              </div>
-              <div class="form-check form-switch d-flex justify-content-between align-items-center">
-                <div>
+
+                <div
+                  class="form-check form-switch d-flex justify-content-between align-items-center"
+                >
+                  <div>
+                    <input
+                      class="form-check-input"
+                      v-model="option.continueSearch"
+                      type="checkbox"
+                      id="continueSearch"
+                    />
+                    <label class="form-check-label" for="continueSearch">Auto Search :</label>
+                  </div>
                   <input
-                    class="form-check-input"
-                    v-model="option.searchLimited"
-                    type="checkbox"
-                    id="searchLimited"
+                    type="text"
+                    v-model="option.incrementBy"
+                    class="form-control w-50"
                     :disabled="!option.continueSearch"
                   />
-                  <label class="form-check-label" for="searchLimited">Search limit :</label>
                 </div>
-                <input
-                  type="text"
-                  v-model="option.searchLimit"
-                  class="form-control w-50"
-                  :disabled="!option.searchLimited"
-                />
+                <div
+                  class="form-check form-switch d-flex justify-content-between align-items-center"
+                >
+                  <div>
+                    <input
+                      class="form-check-input"
+                      v-model="option.searchLimited"
+                      type="checkbox"
+                      id="searchLimited"
+                      :disabled="!option.continueSearch"
+                    />
+                    <label class="form-check-label" for="searchLimited">Search limit :</label>
+                  </div>
+                  <input
+                    type="text"
+                    v-model="option.searchLimit"
+                    class="form-control w-50"
+                    :disabled="!option.searchLimited"
+                  />
+                </div>
               </div>
 
-              <hr />
+              <div v-if="state.searching">
+                <p class="alert alert-info text-center" v-if="option.searchingType == 'static'">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    xmlns:xlink="http://www.w3.org/1999/xlink"
+                    style="margin:auto;background:transparent;display:block;"
+                    width="50px"
+                    height="50px"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="xMidYMid"
+                  >
+                    <rect x="17.5" y="30" width="15" height="40" fill="#e15b64">
+                      <animate
+                        attributeName="y"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="18;30;30"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.2s"
+                      />
+                      <animate
+                        attributeName="height"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="64;40;40"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.2s"
+                      />
+                    </rect>
+                    <rect x="42.5" y="30" width="15" height="40" fill="#f8b26a">
+                      <animate
+                        attributeName="y"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="20.999999999999996;30;30"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.1s"
+                      />
+                      <animate
+                        attributeName="height"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="58.00000000000001;40;40"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.1s"
+                      />
+                    </rect>
+                    <rect x="67.5" y="30" width="15" height="40" fill="#abbd81">
+                      <animate
+                        attributeName="y"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="20.999999999999996;30;30"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                      />
+                      <animate
+                        attributeName="height"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="58.00000000000001;40;40"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                      />
+                    </rect>
+                  </svg>
+                  Checking: {{ fullNumber }}
+                </p>
+                <p class="alert alert-info text-center" v-if="option.searchingType == 'random'">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    xmlns:xlink="http://www.w3.org/1999/xlink"
+                    style="margin:auto;background:transparent;display:block;"
+                    width="50px"
+                    height="50px"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="xMidYMid"
+                  >
+                    <rect x="17.5" y="30" width="15" height="40" fill="#e15b64">
+                      <animate
+                        attributeName="y"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="18;30;30"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.2s"
+                      />
+                      <animate
+                        attributeName="height"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="64;40;40"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.2s"
+                      />
+                    </rect>
+                    <rect x="42.5" y="30" width="15" height="40" fill="#f8b26a">
+                      <animate
+                        attributeName="y"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="20.999999999999996;30;30"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.1s"
+                      />
+                      <animate
+                        attributeName="height"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="58.00000000000001;40;40"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                        begin="-0.1s"
+                      />
+                    </rect>
+                    <rect x="67.5" y="30" width="15" height="40" fill="#abbd81">
+                      <animate
+                        attributeName="y"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="20.999999999999996;30;30"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                      />
+                      <animate
+                        attributeName="height"
+                        repeatCount="indefinite"
+                        dur="1s"
+                        calcMode="spline"
+                        keyTimes="0;0.5;1"
+                        values="58.00000000000001;40;40"
+                        keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
+                      />
+                    </rect>
+                  </svg>
+                  Searching Random Avaialble Numbers
+                </p>
+              </div>
 
-              <p class="alert alert-info text-center" v-if="state.searchingType == 'static'">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  xmlns:xlink="http://www.w3.org/1999/xlink"
-                  style="margin:auto;background:transparent;display:block;"
-                  width="50px"
-                  height="50px"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="xMidYMid"
-                >
-                  <rect x="17.5" y="30" width="15" height="40" fill="#e15b64">
-                    <animate
-                      attributeName="y"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="18;30;30"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.2s"
-                    />
-                    <animate
-                      attributeName="height"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="64;40;40"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.2s"
-                    />
-                  </rect>
-                  <rect x="42.5" y="30" width="15" height="40" fill="#f8b26a">
-                    <animate
-                      attributeName="y"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="20.999999999999996;30;30"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.1s"
-                    />
-                    <animate
-                      attributeName="height"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="58.00000000000001;40;40"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.1s"
-                    />
-                  </rect>
-                  <rect x="67.5" y="30" width="15" height="40" fill="#abbd81">
-                    <animate
-                      attributeName="y"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="20.999999999999996;30;30"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                    />
-                    <animate
-                      attributeName="height"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="58.00000000000001;40;40"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                    />
-                  </rect>
-                </svg>
-                Checking Number: {{ fullNumber }}
-              </p>
-              <p class="alert alert-info text-center" v-if="state.searchingType == 'random'">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  xmlns:xlink="http://www.w3.org/1999/xlink"
-                  style="margin:auto;background:transparent;display:block;"
-                  width="50px"
-                  height="50px"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="xMidYMid"
-                >
-                  <rect x="17.5" y="30" width="15" height="40" fill="#e15b64">
-                    <animate
-                      attributeName="y"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="18;30;30"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.2s"
-                    />
-                    <animate
-                      attributeName="height"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="64;40;40"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.2s"
-                    />
-                  </rect>
-                  <rect x="42.5" y="30" width="15" height="40" fill="#f8b26a">
-                    <animate
-                      attributeName="y"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="20.999999999999996;30;30"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.1s"
-                    />
-                    <animate
-                      attributeName="height"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="58.00000000000001;40;40"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                      begin="-0.1s"
-                    />
-                  </rect>
-                  <rect x="67.5" y="30" width="15" height="40" fill="#abbd81">
-                    <animate
-                      attributeName="y"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="20.999999999999996;30;30"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                    />
-                    <animate
-                      attributeName="height"
-                      repeatCount="indefinite"
-                      dur="1s"
-                      calcMode="spline"
-                      keyTimes="0;0.5;1"
-                      values="58.00000000000001;40;40"
-                      keySplines="0 0.5 0.5 1;0 0.5 0.5 1"
-                    />
-                  </rect>
-                </svg>
-                Searching Random Avaialble Numbers
-              </p>
+              <div class="col-12">
+                <button
+                  v-if="state.searching"
+                  @click="state.searching = false"
+                  type="button"
+                  class="btn w-100 btn-danger"
+                >Stop</button>
+              </div>
             </div>
           </div>
         </div>
@@ -345,19 +420,20 @@ function getRandomAvailableNumber() {
               </div>
               <ul class="list-group" v-if="history.length > 0">
                 <li
-                  v-for="record in history"
-                  :key="record.simNumber"
+                  v-for="(record, index) in history"
+                  :key="index"
                   class="list-group-item d-flex justify-content-between align-items-center"
                   :class="[record.available ? 'list-group-item-info' : 'list-group-item-secondary']"
                 >
-                  <span>
-                    {{
-                      record.simNumber
-                    }}
-                    <span
-                      :class="[record.available ? 'text-primary' : 'text-danger']"
-                    >({{ record.available ? 'Available' : 'Not Available' }})</span>
+                  [{{ ++index }}]
+                  <span>{{ record.simNumber }}</span>
+                  <span :class="[record.available ? 'text-primary' : 'text-danger']">
+                    ({{
+                      record.available ? 'Available'
+                        : 'Not Available'
+                    }})
                   </span>
+
                   <a
                     v-if="record.available"
                     target="_blank"
@@ -366,7 +442,7 @@ function getRandomAvailableNumber() {
                   >Buy Now</a>
                 </li>
               </ul>
-              <h5 v-else class="text-center">no number searched yet</h5>
+              <h5 v-else class="text-center">no number found</h5>
             </div>
           </div>
         </div>
@@ -383,3 +459,15 @@ function getRandomAvailableNumber() {
     </p>
   </footer>
 </template>
+
+
+<style>
+ul {
+  height: 80vh;
+  overflow: scroll;
+}
+
+body{
+  min-width: 400px;
+}
+</style>
