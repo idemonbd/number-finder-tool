@@ -50,6 +50,7 @@ function initAutoSearch() {
         simNumber.value = (parseInt(simNumber.value) + parseInt(option.value.incrementBy)).toString().padStart(simNumber.value.length, "0")
         startSearch()
       } else {
+        option.value.searchingType = ""
         state.value.searching = false
         playSound('completeSearching')
       }
@@ -75,7 +76,6 @@ function startSearch() {
       .then(res => {
         option.value.searchingType = ''
         if (res.data.status == "SUCCESSFUL") {
-
           if (option.value.onlyAvailableNumber && res.data.data.available) {
             addToHistory({
               simNumber: fullNumber.value,
