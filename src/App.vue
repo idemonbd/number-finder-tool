@@ -37,9 +37,17 @@ function playSound(type = '') {
 }
 
 function addToHistory(obj) {
-  history.value.unshift(obj)
+
   if (obj.available) {
     playSound('gotNumber')
+  }
+
+  if (option.value.onlyAvailableNumber) {
+    if (res.data.data.available) {
+      history.value.unshift(obj)
+    }
+  } else {
+    history.value.unshift(obj)
   }
 }
 
@@ -72,16 +80,15 @@ function startSearch() {
 
     option.value.searchingType = "static"
     state.value.searching = true
+
     axios.post(serverApiUrl, postData)
       .then(res => {
         option.value.searchingType = ''
         if (res.data.status == "SUCCESSFUL") {
-          if (option.value.onlyAvailableNumber && res.data.data.available) {
-            addToHistory({
-              simNumber: fullNumber.value,
-              available: res.data.data.available
-            })
-          }
+          addToHistory({
+            simNumber: fullNumber.value,
+            available: res.data.data.available
+          })
 
           if (state.value.searching) {
             initAutoSearch()
